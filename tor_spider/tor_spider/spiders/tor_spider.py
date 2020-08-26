@@ -73,7 +73,7 @@ class TorSpider(scrapy.Spider):
     link_field = 'Link'
     page_hash = 'Hash'
     proxy = 'http://127.0.0.1:8118' # privoxy > tor port
-    max_depth = 19
+    max_depth = 3
     rotate_user_agent = True
     allow=[r'.*\.onion.*']
     deny=[r'.*facebook.*', r'.*\.org.*', r'.*\.com.*',
@@ -81,7 +81,9 @@ class TorSpider(scrapy.Spider):
             r'.*shop.*', r'.*apple.*', r'.*iphone.*', r'.*card.*',
             r'.*bitcoin.*', r'.*coin.*', r'.*money.*', r'.*weapon.*',
             r'.*guns.*', r'.*cannabis.*', r'.*scam.*', r'.*kids.*',
-            r'.*hitman.*', r'.*kill.*', r'.*murder.*', r'.*cocaine.*']
+            r'.*hitman.*', r'.*kill.*', r'.*murder.*', r'.*cocaine.*',
+            r'.*teen.*', r'.*rape.*', r'.*pedo.*', r'.* cp .*',
+            r'.*jailbait.*', r'.*loli.*', r'.*boys.*']
     deny_extensions=['jpg', 'png', 'mp3', 'wav', 'gif',
             'pdf', 'rss', 'ogg', 'mp4', 'avi', 'svg', 'csv',
             '7z', '7zip', 'apk', 'bz2', 'cdr', 'dmg', 'ico',
