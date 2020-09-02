@@ -1,44 +1,39 @@
-import scrapy
+from scrapy.utils.project import get_project_settings
 from scrapy.linkextractors import LinkExtractor
-import sqlite3
-import random
-import time
-from urllib import parse
 from collections import Counter
-import re
+from datetime import datetime
+from urllib import parse
+import aiosqlite
+import asyncio
+import logging
+import random
 import ssdeep
-import os
+import scrapy
+import time
+import re
+
+
+# Import variables from settings
+locals().update(get_project_settings().copy_to_dict())
+
+for module, log_level in LOG_LEVELS.items():
+    logging.getLogger(module).setLevel(getattr(logging, log_level))
 
 
 def do_query(path, q, args=None, commit=False):
-    """
-    do_query - Run a SQLite query, waiting for DB in necessary
 
-    Args:
-        path (str): path to DB file
-        q (str): SQL query
-        args (list): values for `?` placeholders in q
-        commit (bool): whether or not to commit after running query
-    Returns:
-        list of lists: fetchall() for the query
-    """
-    if args is None:
-        args = []
-    for attempt in range(50):
-        try:
-            con = sqlite3.connect(path)
-            cur = con.cursor()
-            cur.execute(q, args)
-            ans = cur.fetchall()
+    async def _do_query(path, q, args=None, commit=False):
+        if args is None:
+            args = []
+        async with aiosqlite.connect(path) as db:
+            cur = await db.execute(q, args)
+            ans = await cur.fetchall()
             if commit:
-                con.commit()
-            cur.close()
-            con.close()
-            del cur
-            del con
-            return ans
-        except:
-            time.sleep(random.randint(10, 30))
+                await db.commit()
+        return ans
+
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(_do_query(path, q, args, commit))
 
 
 class VisitedLinksCollection:
@@ -66,36 +61,20 @@ class VisitedLinksCollection:
 
 class TorSpider(scrapy.Spider):
 
-    # Spider settings
+    """
+    Main spider class, which crawl all links from
+    start pages and walk on them to maximum depth.
+    """
+
     name = 'tor_spider'
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tor_links')
-    table = 'Links'
-    link_field = 'Link'
-    page_hash = 'Hash'
-    proxy = 'http://127.0.0.1:8118' # privoxy > tor port
-    max_depth = 3
-    rotate_user_agent = True
-    allow=[r'.*\.onion.*']
-    deny=[r'.*facebook.*', r'.*\.org.*', r'.*\.com.*',
-            r'.*porn.*', r'.*sex.*', r'.*child.*', r'.*market.*',
-            r'.*shop.*', r'.*apple.*', r'.*iphone.*', r'.*card.*',
-            r'.*bitcoin.*', r'.*coin.*', r'.*money.*', r'.*weapon.*',
-            r'.*guns.*', r'.*cannabis.*', r'.*scam.*', r'.*kids.*',
-            r'.*hitman.*', r'.*kill.*', r'.*murder.*', r'.*cocaine.*',
-            r'.*teen.*', r'.*rape.*', r'.*pedo.*', r'.* cp .*',
-            r'.*jailbait.*', r'.*loli.*', r'.*boys.*']
-    deny_extensions=['jpg', 'png', 'mp3', 'wav', 'gif',
-            'pdf', 'rss', 'ogg', 'mp4', 'avi', 'svg', 'csv',
-            '7z', '7zip', 'apk', 'bz2', 'cdr', 'dmg', 'ico',
-            'iso', 'tar', 'tar.gz', 'webm', 'xz']
-    max_netloc_count = 300 # link count for one host
-    randomize = True
+
+    rotate_user_agent = ROTATE_USER_AGENT
 
 
     def start_requests(self):
-        start_urls = [row[1] for row in do_query(self.db_path,
-            'SELECT * FROM {}'.format(self.table))]
-        if self.randomize:
+        start_urls = [row[1] for row in do_query(DB_PATH, 
+            'SELECT * FROM {}'.format(TABLE))]
+        if RANDOMIZE_URLS:
             random.shuffle(start_urls)
         self.visited_urls = VisitedLinksCollection(start_urls)
 
@@ -103,7 +82,7 @@ class TorSpider(scrapy.Spider):
             yield scrapy.Request(
                     url=url,
                     callback=self.parse,
-                    meta={'proxy': self.proxy}
+                    meta={'proxy': PROXY}
                     )
 
 
@@ -113,23 +92,27 @@ class TorSpider(scrapy.Spider):
 
         insert = True
 
-        if len(do_query(self.db_path,
-            'SELECT * FROM {} WHERE {} LIKE "%{}"'.format(self.table, self.link_field, url))):
-            print('[WARNING] Domain already in DB:', response.url)
+        if len(do_query(DB_PATH,
+            'SELECT * FROM {} WHERE {} LIKE "%{}"'.format(TABLE, LINK_FIELD, url))):
+            do_query(DB_PATH, 'UPDATE {} SET {}="{}" WHERE {}="{}"'.format(
+                TABLE, LAST_VISITED_FIELD, datetime.now(), LINK_FIELD, url), commit=True)
+            if LOG_ENABLED:
+                print('[WARNING] Domain already in DB:', response.url)
             insert = False
 
         if insert:
-            page_hash = ssdeep.hash(response.text)
+            hash_val = ssdeep.hash(response.text)
 
-            if len(do_query(self.db_path,
-                'SELECT * FROM {} WHERE {} LIKE "{}%"'.format(self.table, self.page_hash, page_hash))):
-                print('[WARNING] Clone page:', response.url)
+            if len(do_query(DB_PATH,
+                'SELECT * FROM {} WHERE {} LIKE "{}%"'.format(TABLE, HASH_FIELD, hash_val))):
+                if LOG_ENABLED:
+                    print('[WARNING] Clone page:', response.url)
                 insert = False
 
         if insert:
-            row = (title, url, description, page_hash)
+            row = (title, url, description, hash_val, datetime.now())
 
-            do_query(self.db_path, 'INSERT INTO {} VALUES ({})'.format(self.table, ','.join('?'
+            do_query(DB_PATH, 'INSERT INTO {} VALUES ({})'.format(TABLE, ','.join('?'
                 for _ in range(len(row)))), args=row, commit=True)
             print('[INFO] Inserted in DB:', url)
 
@@ -139,33 +122,31 @@ class TorSpider(scrapy.Spider):
         if not parse.urlparse(response.url).netloc.endswith('.onion'):
             return
 
-        print('[INFO]', response.url)
-
         curr_depth = response.meta.get('depth', 1)
 
         try:
             title = response.css('title::text').get()
-            if any(re.search(pattern, title, re.IGNORECASE) for pattern in self.deny):
+            if any(re.search(pattern, title, re.IGNORECASE) for pattern in DENY):
                 return
         except:
             title = ''
 
         try:
             description = response.css('meta[name=description]').attrib['content']
-            if any(re.search(pattern, description, re.IGNORECASE) for pattern in self.deny):
+            if any(re.search(pattern, description, re.IGNORECASE) for pattern in DENY):
                 return
         except:
             description = ''
 
         self.update_db(response, title, description)
 
-        if not curr_depth < self.max_depth:
+        if curr_depth > MAX_DEPTH:
             return
 
         le = LinkExtractor(
-                allow=self.allow,
-                deny=self.deny,
-                deny_extensions=self.deny_extensions,
+                allow=ALLOW,
+                deny=DENY,
+                deny_extensions=DENY_EXTENSIONS,
                 unique=True
                 )
         links = le.extract_links(response)
@@ -173,13 +154,13 @@ class TorSpider(scrapy.Spider):
         for link in links:
             if parse.urlparse(link.url).netloc.endswith('.onion') \
                     and link.url not in self.visited_urls \
-                    and self.visited_urls[link.url] < self.max_netloc_count:
+                    and self.visited_urls[link.url] < MAX_LINKS_FOR_HOST:
                 self.visited_urls.add(link.url)
                 yield scrapy.Request(
                         url=link.url,
                         meta={
                             'depth': curr_depth + 1,
-                            'proxy': self.proxy
+                            'proxy': PROXY
                             },
                         callback=self.parse,
                         )

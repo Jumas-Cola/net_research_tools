@@ -1,0 +1,11 @@
+{
+    "api_id": 123456,
+    "api_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bot_token": "1234567:aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "db_name": "tor_links",
+    "table": "Links",
+    "field": "Link",
+    "date_field": "LastVisited",
+    "proxy_url": "http://127.0.0.1:8118",
+    "days_before_visited": 30
+} 

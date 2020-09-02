@@ -6,9 +6,41 @@
 #     https://docs.scrapy.org/en/latest/topics/settings.html
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
+from pathlib import Path
+
 LOG_ENABLED = 0
 
+LOG_LEVELS = {
+        'aiosqlite': 'WARNING',
+        }
+
 BOT_NAME = 'tor_spider'
+
+DB_PATH = Path(__file__).parent.parent.joinpath('tor_links')
+TABLE = 'Links'
+LINK_FIELD = 'Link'
+HASH_FIELD = 'Hash'
+LAST_VISITED_FIELD = 'LastVisited'
+PROXY = 'http://127.0.0.1:8118'
+MAX_DEPTH = 3
+MAX_LINKS_FOR_HOST = 300
+ROTATE_USER_AGENT = True
+RANDOMIZE_URLS = True
+ALLOW = [r'.*\.onion.*']
+DENY = [r'.*facebook.*', r'.*\.org.*', r'.*\.com.*',
+        r'.*porn.*', r'.*sex.*', r'.*child.*', r'.*market.*',
+        r'.*shop.*', r'.*apple.*', r'.*iphone.*', r'.*card.*',
+        r'.*bitcoin.*', r'.*coin.*', r'.*money.*', r'.*weapon.*',
+        r'.*guns.*', r'.*cannabis.*', r'.*scam.*', r'.*kids.*',
+        r'.*hitman.*', r'.*kill.*', r'.*murder.*', r'.*cocaine.*',
+        r'.*teen.*', r'.*rape.*', r'.*pedo.*', r'.* cp .*',
+        r'.*jailbait.*', r'.*loli.*', r'.*boys.*'
+        ]
+DENY_EXTENSIONS = ['jpg', 'png', 'mp3', 'wav', 'gif',
+        'pdf', 'rss', 'ogg', 'mp4', 'avi', 'svg', 'csv',
+        '7z', '7zip', 'apk', 'bz2', 'cdr', 'dmg', 'ico',
+        'iso', 'tar', 'tar.gz', 'webm', 'xz'
+        ]
 
 SPIDER_MODULES = ['tor_spider.spiders']
 NEWSPIDER_MODULE = 'tor_spider.spiders'
@@ -21,15 +53,15 @@ NEWSPIDER_MODULE = 'tor_spider.spiders'
 #ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
-CONCURRENT_REQUESTS = 64
+#CONCURRENT_REQUESTS = 32
 
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 3
+#DOWNLOAD_DELAY = 3
 # The download delay setting will honor only one of:
-CONCURRENT_REQUESTS_PER_DOMAIN = 32
-CONCURRENT_REQUESTS_PER_IP = 32
+#CONCURRENT_REQUESTS_PER_DOMAIN = 16
+#CONCURRENT_REQUESTS_PER_IP = 16
 
 # Disable cookies (enabled by default)
 #COOKIES_ENABLED = False
@@ -102,3 +134,5 @@ USER_AGENT_CHOICES = [
 #HTTPCACHE_DIR = 'httpcache'
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
+
+#TWISTED_REACTOR = 'twisted.internet.asyncioreactor.AsyncioSelectorReactor'
