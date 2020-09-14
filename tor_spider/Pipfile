@@ -8,10 +8,7 @@ verify_ssl = true
 [packages]
 scrapy = "*"
 ssdeep = "*"
-telethon = "*"
-aiohttp = "*"
-aiohttp-socks = "*"
-aiosqlite = "*"
+pymysql = "*"
 
 [requires]
 python_version = "3.8"

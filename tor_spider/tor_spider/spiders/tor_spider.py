@@ -1,39 +1,27 @@
 from scrapy.utils.project import get_project_settings
 from scrapy.linkextractors import LinkExtractor
 from collections import Counter
-from datetime import datetime
+from contextlib import closing
 from urllib import parse
-import aiosqlite
-import asyncio
-import logging
+import pymysql
 import random
 import ssdeep
 import scrapy
-import time
 import re
 
 
 # Import variables from settings
 locals().update(get_project_settings().copy_to_dict())
 
-for module, log_level in LOG_LEVELS.items():
-    logging.getLogger(module).setLevel(getattr(logging, log_level))
 
-
-def do_query(path, q, args=None, commit=False):
-
-    async def _do_query(path, q, args=None, commit=False):
-        if args is None:
-            args = []
-        async with aiosqlite.connect(path) as db:
-            cur = await db.execute(q, args)
-            ans = await cur.fetchall()
+def do_query(q, args=None, commit=False):
+    with closing(pymysql.connect(**DB_CONNECTION_PARAMS)) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(q, args)
+            res = cursor.fetchall()
             if commit:
-                await db.commit()
-        return ans
-
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(_do_query(path, q, args, commit))
+                conn.commit()
+    return res
 
 
 class VisitedLinksCollection:
@@ -72,7 +60,7 @@ class TorSpider(scrapy.Spider):
 
 
     def start_requests(self):
-        start_urls = [row[1] for row in do_query(DB_PATH, 
+        start_urls = [row['Link'] for row in do_query(
             'SELECT * FROM {}'.format(TABLE))]
         if RANDOMIZE_URLS:
             random.shuffle(start_urls)
@@ -92,10 +80,10 @@ class TorSpider(scrapy.Spider):
 
         insert = True
 
-        if len(do_query(DB_PATH,
+        if len(do_query(
             'SELECT * FROM {} WHERE {} LIKE "%{}"'.format(TABLE, LINK_FIELD, url))):
-            do_query(DB_PATH, 'UPDATE {} SET {}="{}" WHERE {}="{}"'.format(
-                TABLE, LAST_VISITED_FIELD, datetime.now(), LINK_FIELD, url), commit=True)
+            do_query('UPDATE {} SET {}=CURRENT_TIMESTAMP WHERE {}="{}"'.format(
+                TABLE, LAST_VISITED_FIELD, LINK_FIELD, url), commit=True)
             if LOG_ENABLED:
                 print('[WARNING] Domain already in DB:', response.url)
             insert = False
@@ -103,17 +91,19 @@ class TorSpider(scrapy.Spider):
         if insert:
             hash_val = ssdeep.hash(response.text)
 
-            if len(do_query(DB_PATH,
+            if len(do_query(
                 'SELECT * FROM {} WHERE {} LIKE "{}%"'.format(TABLE, HASH_FIELD, hash_val))):
                 if LOG_ENABLED:
                     print('[WARNING] Clone page:', response.url)
                 insert = False
 
         if insert:
-            row = (title, url, description, hash_val, datetime.now())
+            fields = (TITLE_FIELD, LINK_FIELD, DESCRIPTION_FIELD, HASH_FIELD)
+            row = (title, url, description, hash_val)
 
-            do_query(DB_PATH, 'INSERT INTO {} VALUES ({})'.format(TABLE, ','.join('?'
-                for _ in range(len(row)))), args=row, commit=True)
+            do_query('INSERT INTO {} ({}) VALUES ({})'.format(TABLE, 
+                ','.join(fields),
+                ','.join('%s' for _ in range(len(row)))), args=row, commit=True)
             print('[INFO] Inserted in DB:', url)
 
 

@@ -7,21 +7,30 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 from pathlib import Path
+from pymysql.cursors import DictCursor
 
 LOG_ENABLED = 0
 
-LOG_LEVELS = {
-        'aiosqlite': 'WARNING',
-        }
 
-BOT_NAME = 'tor_spider'
+DB_CONNECTION_PARAMS = dict(
+    host='192.168.1.201',
+    user='root',
+    password='ch3ch2oh',
+    db='tor_links',
+    charset='utf8',
+    cursorclass=DictCursor
+)
 
-DB_PATH = Path(__file__).parent.parent.joinpath('tor_links')
+
 TABLE = 'Links'
+TITLE_FIELD = 'Title'
 LINK_FIELD = 'Link'
 HASH_FIELD = 'Hash'
+DESCRIPTION_FIELD = 'Description'
 LAST_VISITED_FIELD = 'LastVisited'
+
 PROXY = 'http://127.0.0.1:8118'
+
 MAX_DEPTH = 3
 MAX_LINKS_FOR_HOST = 300
 ROTATE_USER_AGENT = True
