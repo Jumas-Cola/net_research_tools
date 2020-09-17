@@ -6,23 +6,15 @@
 #     https://docs.scrapy.org/en/latest/topics/settings.html
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-from pathlib import Path
-from pymysql.cursors import DictCursor
 
-LOG_ENABLED = 0
-
+#LOG_ENABLED = 0
 
 DB_CONNECTION_PARAMS = dict(
-    host='192.168.1.201',
-    user='root',
-    password='ch3ch2oh',
-    db='tor_links',
-    charset='utf8',
-    cursorclass=DictCursor
+    host='localhost',
+    port=6379,
+    password='hardpass123',
 )
 
-
-TABLE = 'Links'
 TITLE_FIELD = 'Title'
 LINK_FIELD = 'Link'
 HASH_FIELD = 'Hash'
@@ -31,8 +23,8 @@ LAST_VISITED_FIELD = 'LastVisited'
 
 PROXY = 'http://127.0.0.1:8118'
 
-MAX_DEPTH = 3
-MAX_LINKS_FOR_HOST = 300
+MAX_DEPTH = None
+MAX_LINKS_FOR_HOST = None
 ROTATE_USER_AGENT = True
 RANDOMIZE_URLS = True
 ALLOW = [r'.*\.onion.*']
@@ -62,7 +54,7 @@ NEWSPIDER_MODULE = 'tor_spider.spiders'
 #ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
-#CONCURRENT_REQUESTS = 32
+CONCURRENT_REQUESTS = 32
 
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay

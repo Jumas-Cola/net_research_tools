@@ -1,27 +1,19 @@
 from scrapy.utils.project import get_project_settings
 from scrapy.linkextractors import LinkExtractor
 from collections import Counter
-from contextlib import closing
+from datetime import datetime
 from urllib import parse
-import pymysql
 import random
 import ssdeep
 import scrapy
+import redis
 import re
 
 
 # Import variables from settings
 locals().update(get_project_settings().copy_to_dict())
 
-
-def do_query(q, args=None, commit=False):
-    with closing(pymysql.connect(**DB_CONNECTION_PARAMS)) as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(q, args)
-            res = cursor.fetchall()
-            if commit:
-                conn.commit()
-    return res
+r = redis.Redis(**DB_CONNECTION_PARAMS)
 
 
 class VisitedLinksCollection:
@@ -60,8 +52,7 @@ class TorSpider(scrapy.Spider):
 
 
     def start_requests(self):
-        start_urls = [row['Link'] for row in do_query(
-            'SELECT * FROM {}'.format(TABLE))]
+        start_urls = [r.hget(k, LINK_FIELD).decode() for k in r.keys()]
         if RANDOMIZE_URLS:
             random.shuffle(start_urls)
         self.visited_urls = VisitedLinksCollection(start_urls)
@@ -80,10 +71,16 @@ class TorSpider(scrapy.Spider):
 
         insert = True
 
-        if len(do_query(
-            'SELECT * FROM {} WHERE {} LIKE "%{}"'.format(TABLE, LINK_FIELD, url))):
-            do_query('UPDATE {} SET {}=CURRENT_TIMESTAMP WHERE {}="{}"'.format(
-                TABLE, LAST_VISITED_FIELD, LINK_FIELD, url), commit=True)
+        netloc_without_domain = parsed_url.netloc.rstrip('.onion')
+
+        keys = r.keys('*{}*'.format(netloc_without_domain))
+
+        if len(keys):
+            full_key = keys[0]
+            row = r.hgetall(full_key)
+            row[LAST_VISITED_FIELD.encode()] = datetime.now().isoformat()
+            r.delete(full_key)
+            r.hmset('link:{};{}'.format(netloc_without_domain, row[HASH_FIELD.encode()]), row)
             if LOG_ENABLED:
                 print('[WARNING] Domain already in DB:', response.url)
             insert = False
@@ -91,19 +88,18 @@ class TorSpider(scrapy.Spider):
         if insert:
             hash_val = ssdeep.hash(response.text)
 
-            if len(do_query(
-                'SELECT * FROM {} WHERE {} LIKE "{}%"'.format(TABLE, HASH_FIELD, hash_val))):
+            if len(r.keys('*{}'.format(hash_val))):
                 if LOG_ENABLED:
                     print('[WARNING] Clone page:', response.url)
                 insert = False
 
         if insert:
             fields = (TITLE_FIELD, LINK_FIELD, DESCRIPTION_FIELD, HASH_FIELD)
-            row = (title, url, description, hash_val)
+            row = {TITLE_FIELD: title, LINK_FIELD: url,
+                DESCRIPTION_FIELD: description, HASH_FIELD: hash_val}
 
-            do_query('INSERT INTO {} ({}) VALUES ({})'.format(TABLE, 
-                ','.join(fields),
-                ','.join('%s' for _ in range(len(row)))), args=row, commit=True)
+            r.hmset('link:{};{}'.format(netloc_without_domain, hash_val), row)
+
             print('[INFO] Inserted in DB:', url)
 
 
@@ -130,7 +126,7 @@ class TorSpider(scrapy.Spider):
 
         self.update_db(response, title, description)
 
-        if curr_depth > MAX_DEPTH:
+        if MAX_DEPTH and curr_depth > MAX_DEPTH:
             return
 
         le = LinkExtractor(
@@ -144,7 +140,8 @@ class TorSpider(scrapy.Spider):
         for link in links:
             if parse.urlparse(link.url).netloc.endswith('.onion') \
                     and link.url not in self.visited_urls \
-                    and self.visited_urls[link.url] < MAX_LINKS_FOR_HOST:
+                    and (not MAX_LINKS_FOR_HOST or
+                    self.visited_urls[link.url] < MAX_LINKS_FOR_HOST):
                 self.visited_urls.add(link.url)
                 yield scrapy.Request(
                         url=link.url,

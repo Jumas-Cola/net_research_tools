@@ -1,0 +1,23 @@
+version: '3.7'
+
+services:
+
+    redis:
+        container_name: redis
+        image: redis
+        command: 
+            - 'redis-server'
+            - '--loglevel ${REDIS_LOGLEVEL:-warning}'
+            - '--databases 2'
+            - '--save 900 1'
+            - '--save 300 10'
+            - '--save 60 10000'
+            - '--maxmemory ${REDIS_MAXMEM:-50mb}'
+            - '--maxmemory-policy ${REDIS_POLICY:-noeviction}'
+            - '--requirepass hardpass123'
+        restart: always
+        volumes:
+            - /home/docker-redis/data:/data
+            - /home/docker-redis/redis.conf:/usr/local/etc/redis/redis.conf
+        ports:
+            - "6379:6379"

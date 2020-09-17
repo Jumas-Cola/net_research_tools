@@ -6,9 +6,8 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
-scrapy = "*"
-ssdeep = "*"
 redis = "*"
+flask = "*"
 
 [requires]
 python_version = "3.8"
